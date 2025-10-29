@@ -1,50 +1,105 @@
 import time
 import requests
-from config import TOKEN
+from config import TOKEN, WEATHER_API_KEY
+import json
 
-TG_BO_BASE_URL = 'https://api.telegram.org/bot{TOKEN}'
-WEATHER_URL = 'http://api.weatherapi.com/v1'
+# ======= Telegram API========
+TG_BO_BASE_URL = f'https://api.telegram.org/bot{TOKEN}'
+WEATHER_URL = 'http://api.weatherapi.com/v1/current.json'
+GETME_URL = f"{TG_BO_BASE_URL}/getMe"
+SENDMASSAGE_URL = f"{TG_BO_BASE_URL}/sendMessage"
+GETUPDATES_URL = f"{TG_BO_BASE_URL}/getUpdates"
 
 
-def get_last_update():
-    get_updates_url = f"{TG_BO_BASE_URL}/getUpdates"
+def get_updates() -> list:
+    return requests.get(GETUPDATES_URL).json()
 
-    response = requests.get(get_updates_url)
-    data = response.json()
 
-    return data['result'][-1]
+def get_last_update() -> list:
+    return requests.get(GETUPDATES_URL).json()['result'][-1]
 
-def send_message(chat_id, text):
-    send_message_url = f"{TG_BO_BASE_URL}/sendMessage"
 
-    payload = {
-        'chat_id': chat_id,
-        'text': text
+def last_chat_id(last_user: dict) -> str:
+    return last_user['message']['chat']['id']
+
+
+def last_first_name(last_user: dict) -> str:
+    return last_user['message']['from']['first_name']
+
+
+def send_massage(id: str, text: str) -> None:
+    requests.get(SENDMASSAGE_URL, params={"chat_id": id, "text":text})
+
+
+def last_text(last_user: str) -> None:
+    return last_user['message']['text']
+
+def get_weather(city: str) -> float:
+    res = requests.get(WEATHER_URL, params={'key':f"{WEATHER_API_KEY}", 'q':city}).json()
+
+    loc = res['location']['name']
+    temp = res['current']['temp_c']
+    cond = res['current']['condition']['text']
+    
+    return [loc, temp, cond]
+
+def translate_condition(condition: str) -> str:
+    condition = condition.lower()
+    
+    translations = {
+        "sunny": "Quyoshli",
+        "clear": "Tiniq, musaffo",
+        "partly cloudy": "Qisman bulutli",
+        "cloudy": "Bulutli",
+        "overcast": "Qorong‘i, quyosh ko‘rinmaydi",
+        "rain": "Yomg‘ir",
+        "light rain": "Yengil yomg‘ir",
+        "heavy rain": "Kuchli yomg‘ir",
+        "drizzle": "Mayda yomg‘ir",
+        "snow": "Qor",
+        "light snow": "Yengil qor",
+        "heavy snow": "Qalin qor",
+        "thunderstorm": "Momaqaldiroq",
+        "fog": "Tuman",
+        "mist": "Yengil tuman",
+        "windy": "Shamolli",
+        "freezing rain": "Muzlab tushgan yomg‘ir",
     }
-    response = requests.get(send_message_url, params=payload)
+    
+    for eng, uz in translations.items():
+        if eng in condition:
+            return uz
+        
+    return condition.capitalize()
 
-def get_current_weather(city):
-    get_current_wather_url = f"{WEATHER_URL}/current.json"
+translate_condition(get_weather('samarkand')[2])
 
-    payload = {
-        'key': 'c852ebca46f148469f3172212250707',
-        'q': city
-    }
-    response = requests.get(get_current_wather_url, params=payload)
 
-    data = response.json()
-    return data['current']['feelslike_c']
-
+last_update_id = 0
 
 while True:
-    last_update = get_last_update()
-    text = last_update['message']['text']
-
-    if text == '/start':
-        send_message(last_update['message']['chat']['id'], 'salom')
-    elif text in ['toshkent', 'samarqand', 'jizzax']:
-        weather = get_current_weather(text)
-        text = f"Hozir {text} da ob-havo {weather}"
-        send_message('1258594598', text)
-
-    time.sleep(3)
+    update = get_last_update()
+    new_update_id = update['update_id']
+    
+    
+    if not new_update_id:
+        time.sleep(2)
+        continue
+    
+    text = last_text(update)
+    
+    if last_update_id != new_update_id:    
+        if text == "/start":
+            send_massage(last_chat_id(get_last_update()),f"Salom {last_first_name(get_last_update())}!\n👋 Meni Ob-havo botimga xush kelibsiz!\n🌤️ Qaysi shahar ob-havosini bilmoqchisiz?")
+        else:
+            try:
+                weather_info = get_weather(text)
+                translate_cond = translate_condition(weather_info[-1])
+                
+                send_massage(last_chat_id(get_last_update()), f"Hozirgi kunda {weather_info[0]}da ob-havo harorati {weather_info[1]}C, {translate_cond}")
+            except:
+                send_massage(last_chat_id(get_last_update()), "Uzr, ob-havo ma'lumotini topa olmadim.")
+    
+    last_update_id = new_update_id
+    time.sleep(0.5)
+    
