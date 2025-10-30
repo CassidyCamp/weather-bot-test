@@ -82,8 +82,8 @@ while True:
     
     
     if not new_update_id:
-        time.sleep(2)
         continue
+        time.sleep(2)
     
     text = last_text(update)
     
