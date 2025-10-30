@@ -1,7 +1,6 @@
 import time
 import requests
 from config import TOKEN, WEATHER_API_KEY
-import json
 
 # ======= Telegram API========
 TG_BO_BASE_URL = f'https://api.telegram.org/bot{TOKEN}'
